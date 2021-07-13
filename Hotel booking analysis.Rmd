@@ -1,0 +1,160 @@
+---
+title: "Analiza dokonanych rezerwacji w hotelach i resortach wypoczynkowych"
+author: "Magda Pyndryk"
+date: "1/15/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+### Wprowadzenie
+
+Obserwuje się tendencję wzrostową osób podróżujących i rezerwujących hotele. Często spotykaną sytuacją jest opłacenie niższej kwoty za pobyt w hotelu z uwagi na dłuższy pobyt w nim. W związku z tym postawiono problem badawczy, w którym podjęto próbę potwierdzenia (bądź nie) powyższej zależności. Postawiono także pytanie badawcze: W którym miesiącu warto jest dokonać rezerwacji hotelu z uwagi na najniższą cenę podróżując z rodziną? W celu weryfikacji problemu badawczego i odpowiedzi na pytanie badawcze, przeprowadzono analizę wstępną wybranych zmiennych, szukając zależności i wykrywając prawidłowości występujące pomiędzy zmiennymi. Następnie przeprowadzono analizę wykorzystując regresję logistyczną. 
+
+### Zbiór danych
+
+Zbiór danych przyjęty do analizy, której wyniki zaprezentowano poniżej, pochodzi z kaggle.com. Zbiór zawiera informacje o rezerwacjach miejsc w hotelach oraz resortach wypoczynkowych. Szczegółowymi informacjami przechowywanymi w kolumnach są m.in. data dokonania rezerwacji, długość pobytu, liczba zameldowanych osób czy też liczba dostępnych miejsc parkingowych.
+
+Zbiór danych (źródło): https://www.kaggle.com/jessemostipak/hotel-booking-demand
+
+
+### Analiza eksploracyjna
+
+####Załadowanie bazy danych:
+
+```{r warning=FALSE}
+df <- read.csv("/Users/magdapyndryk/Desktop/hotel.csv", header = TRUE, sep=";")
+df$arrival_date_month = factor(df$arrival_date_month, levels = month.name)
+```
+
+Zbiór zawiera 119290 obserwacji zamieszczonych w 32 kolumnach. Każda z kolumn dostarcza szczegółowych informacji na temat charakterystyk wczytanego zbioru.
+
+```{r}
+library(ggplot2)
+bp <- barplot(table(df$hotel), main = "Zainteresowanie rezerwacją hoteli i resortów", ylab = "Liczba rezerwacji", ylim = c(0,90000), col = c("lightblue", "lightgreen"), border = "white", names.arg = c("Hotel", "Resort"), width = 0.85)
+#text(x = bp, y=df$hotel, labels=as.character(y))
+#text(x = bp, y = df$hotel, label = df$hotel, pos = 3, cex = 0.9, col = "red")
+```
+
+Z powyższego wykresu wynika, że większym zainteresowaniem wśród podróżnych cieszy się rezerwowanie hoteli zwykle umiejscowionych w obrębie miasta. Mniej osób natomiast wybiera resorty wypoczynkowe.
+
+```{r}
+summary(df$lead_time)
+```
+
+"Lead time" zgodnie z definicją przyjętą w hotelarstwie oznacza czas realizacji rezerwacji, czyli okres pomiędzy dokonaniem przez gościa rezerwacji a faktyczną datą zameldowania. W niniejszym zbiorze czas ten określony jest w godzinach. Podstawowe statystyki dotyczące tej zmiennej wraz z wynikiem zostały zaprezentowane w tabeli.
+
+#### Przedstawienie graficzne rozkładów zmiennej: arrival_date_day_of_month, lead_time, arrival_date_week_number
+
+```{r}
+library(ggplot2)
+library(cowplot)
+
+par(mfrow=c(2,2))
+
+hist(df$arrival_date_day_of_month, main="", probability = T)
+lines(density(df$arrival_date_day_of_month), lwd=2, col="red", lty=2)
+
+hist(df$lead_time, main="", probability = T)
+lines(density(df$lead_time), lwd=2, col="red", lty=2)
+
+hist(df$arrival_date_week_number, main="", probability = T)
+lines(density(df$arrival_date_week_number), lwd=2, col="red", lty=2)
+```
+
+Histogram wizualnie reprezentuje zmienną. W związku z tym kształt histogramu łatwo pozwala zobaczyć, gdzie znajduje się stosunkowo duża ilość danych a gdzie jest ich mało. Innymi słowy można zobaczyć, gdzie znajduje się środek wystąpienia największej grupy danych, jak blisko tego środka znajdują się dane oraz gdzie można znaleźć możliwe wartości odstające. 
+
+W związku z powyższym, histogramy bardzo dobrze sprawdzają się w procesie wstępnej analizy danych. 
+
+Korzystając ze zbioru danych dotyczącego branży hotelarskiej, wyświetlono trzy histogramy. Pierwszy z nich, znajdujący się w lewym górnym rogu dotyczy zmiennej arrival_date_day_of_month, czyli dni miesiąca, w których goście przyjechali do hotelu/resortu wypoczynkowego. Można zauważyć, że najwięcej gości przyjechało do wcześniej zarezerwowanego miejsca w połowie miesiąca, najmniej zaś na końcu. Kolejny histogram, znajdujący się obok dotychczas opisanego, charakteryzuje zmienną lead_time, czyli okres pomiędzy dokonaniem przez gościa rezerwacji a faktyczną datą zameldowania. Można zauważyć tendencję spadkową takiego zjawiska. Oznacza to, że im więcej czasu mijało od daty rezerwacji do daty zameldowania, tym mniej osób decydowało się na rezerwację. W krótkim czasie przed zameldowaniem, było najwięcej rezerwacji. Ostatni histogram koncentruje się na pokazaniu prawidłowości zachodzących wśród danych dla zmiennej arrival_date_week_number. Zmienna ta zawiera informacje o tym, w którym tygodniu całego roku dokonano najwięcej rezerwacji. Wynika z niego, że najmniej rezerwacji dokonywano w początkowych i końcowych tygodniach roku, czyli takich, które przypadają w okresie zimowym. Podczas wakacji, czyli w środku roku wystąpiło najwięcej rezerwacji.
+
+#### Badanie zależności pomiędzy zmiennymi: arrival_date_week_number a lead_time
+
+```{r}
+library(corrplot)
+cor(df$arrival_date_week_number, df$lead_time, method = "pearson")
+#plot(x.df$arrival_date_week_number, y.df$lead_time)
+```
+
+Chcąc zbadać zależność pomiędzy zmiennymi, warto skorzystać z metod korelacji. W tym celu skorzystano z jednej z miar badania zależności statystycznej pomiędzy wskazanymi zmiennymi - korelacji Pearsona. Uzyskany wynik nie wskazuje, że pomiędzy zmiennymi wybranymi do badania występuje wysoka korelacja. Jest ona niewielka, gdyż osiąga 0.1268708. Otrzymany rezultat świadczy jednak o tym, że występuje korelacja dodatnia. 
+
+#### Częstotliwość dokonywania rezerwacji na przestrzeni miesięcy dla 2015, 2016 i 2017 roku
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(dygraphs)
+library(sp)
+library(htmltools)
+
+#df <- as_tibble(df)
+#class(df)
+#filter(df, arrival_date_year == 2015)
+
+df %>%  
+  group_by(arrival_date_year, arrival_date_month) %>% 
+  summarise(stays_in_week_nights=sum(stays_in_week_nights)) %>% 
+  ungroup() %>% 
+  transmute(stays_in_week_nights) %>% 
+  ts(start=c(2015,7), end=c(2017,8), frequency = 12) -> rain_ts
+
+print.data.frame(rain_ts)
+
+#assignment_ts <- cbind(time_hotel, time_resort)
+
+df %>%  
+  group_by(arrival_date_year, arrival_date_month) %>% 
+  filter(hotel=="City Hotel") %>%
+  summarise(stays_in_week_nights=sum(stays_in_week_nights)) %>% 
+  ungroup() %>% 
+  transmute(stays_in_week_nights) %>% 
+  ts(start=c(2015,7), end=c(2017,8), frequency = 12) -> time_hotel
+
+time_hotel %>% 
+  dygraph(width=800,height=200,group="fourstations",main="Hotel") %>% 
+  dyOptions(colors ='Red') %>% 
+  dyAxis('x', 'Rok') %>% 
+  dyAxis('y', 'Zameldowanie w tyg.')
+```
+
+```{r}
+df %>%  
+  group_by(arrival_date_year, arrival_date_month) %>% 
+  filter(hotel=="Resort Hotel") %>%
+  summarise(stays_in_week_nights=sum(stays_in_week_nights)) %>% 
+  ungroup() %>% 
+  transmute(stays_in_week_nights) %>% 
+  ts(start=c(2015,7), end=c(2017,8), frequency = 12) -> time_resort
+
+time_resort %>% 
+  dygraph(width=800,height=200,group="fourstations",main="Resort wypoczynkowy") %>% 
+  dyOptions(colors ='Green') %>% 
+  dyAxis('x', 'Rok') %>% 
+  dyAxis('y', 'Zameldowanie w tyg.')
+```
+
+
+```{r}
+#df %>%  
+  # count(.drop = group_by_drop_default(arrival_date_year))
+  #group_by(arrival_date_year, arrival_date_month) %>%
+  #filter(hotel=="Resort Hotel") %>% 
+  #summarise()  %>%
+  #print.data.frame()
+```
+analiza wstępna wybranych zmiennych wraz z opisem, 
+histogramy, wykresy gęstości 
+zależności pomiędzy zmiennymi
+rozkłady zmiennych w czasie
+grupowania zmiennych według kategorii 
+
+### Analiza zaawansowana
+Regresja liniowa/logistyczna + umieścić odpowiedzi na pytania i hipotezy badawcze
+
+### Zakończenie
+
+
+```{r}
+
+```
+
