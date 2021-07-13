@@ -28,7 +28,7 @@
 
 
 ## Screenshots
-![Example screenshot](./img/screenshot.png)
+![Example screenshot](./screenshots/Zrzut ekranu 2021-07-13 o 11.28.59.png)
 <!-- If you have screenshots you'd like to share, include them here. -->
 
 
